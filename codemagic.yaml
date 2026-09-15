@@ -12,6 +12,12 @@ workflows:
     scripts:
       - name: Get Flutter packages
         script: flutter packages pub get
+      - name: Generate Xcode config (no build yet)
+        script: |
+          flutter build ios --release --no-codesign --config-only
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios && pod install
       - name: Build unsigned iOS app (device architecture, no signing)
         script: |
           flutter build ios --release --no-codesign \
