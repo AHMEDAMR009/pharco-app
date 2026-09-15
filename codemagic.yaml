@@ -12,13 +12,6 @@ workflows:
     scripts:
       - name: Get Flutter packages
         script: flutter packages pub get
-      - name: Regenerate missing iOS platform files (e.g. Podfile)
-        script: |
-          # This repo's ios/ folder was scaffolded on Windows, where Flutter
-          # skips generating some iOS-only files (like the Podfile) since
-          # CocoaPods can't run there anyway. `flutter create` only adds
-          # missing files — it won't touch anything already customized.
-          flutter create --platforms=ios .
       - name: Install CocoaPods dependencies
         script: |
           cd ios && pod install
