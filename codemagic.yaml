@@ -7,9 +7,8 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
-      vars:
-        SUPABASE_URL: $SUPABASE_URL
-        SUPABASE_ANON_KEY: $SUPABASE_ANON_KEY
+      groups:
+        - supabase
     scripts:
       - name: Get Flutter packages
         script: flutter packages pub get
