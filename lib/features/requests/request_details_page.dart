@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/providers.dart';
+import '../../widgets/receipt_thumbnail.dart';
 import '../../widgets/status_badge.dart';
 
 final _requestDetailProvider = FutureProvider.family((ref, int id) {
@@ -70,9 +71,19 @@ class RequestDetailsPage extends ConsumerWidget {
               _SectionCard(
                 title: 'Extra Cost Items',
                 rows: r.extraCosts
-                    .map<Widget>((e) => _row(
-                          e.type.label,
-                          'EGP ${e.amount.toStringAsFixed(2)}${e.isChecked ? '' : ' (rejected)'}',
+                    .map<Widget>((e) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            children: [
+                              ReceiptThumbnail(path: e.invoiceImagePath),
+                              if (e.invoiceImagePath != null) const SizedBox(width: 12),
+                              Expanded(child: Text(e.type.label, style: const TextStyle(color: Colors.black54))),
+                              Text(
+                                'EGP ${e.amount.toStringAsFixed(2)}${e.isChecked ? '' : ' (rejected)'}',
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
                         ))
                     .toList(),
               ),

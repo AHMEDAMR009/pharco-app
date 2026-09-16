@@ -12,6 +12,7 @@ class HomePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(myProfileProvider);
     final countsAsync = ref.watch(requestCountsProvider);
+    final approvedAmountAsync = ref.watch(approvedAmountThisMonthProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -27,6 +28,7 @@ class HomePage extends ConsumerWidget {
         onRefresh: () async {
           ref.invalidate(myProfileProvider);
           ref.invalidate(requestCountsProvider);
+          ref.invalidate(approvedAmountThisMonthProvider);
         },
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -77,6 +79,12 @@ class HomePage extends ConsumerWidget {
               )),
               error: (e, _) => Text('Could not load counts: $e'),
             ),
+            const SizedBox(height: 12),
+            approvedAmountAsync.when(
+              data: (amount) => _ApprovedAmountTile(amount: amount),
+              loading: () => const SizedBox.shrink(),
+              error: (e, _) => const SizedBox.shrink(),
+            ),
             const SizedBox(height: 28),
             ElevatedButton.icon(
               onPressed: () => context.push('/requests/new'),
@@ -106,6 +114,46 @@ class HomePage extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+class _ApprovedAmountTile extends StatelessWidget {
+  final double amount;
+  const _ApprovedAmountTile({required this.amount});
+
+  @override
+  Widget build(BuildContext context) {
+    final monthLabel = _monthName(DateTime.now().month);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Approved This Month', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                const SizedBox(height: 2),
+                Text(monthLabel, style: const TextStyle(fontSize: 12, color: Colors.black38)),
+              ],
+            ),
+            Text(
+              'EGP ${amount.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: PharcoColors.success),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _monthName(int month) {
+    const names = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return names[month - 1];
   }
 }
 

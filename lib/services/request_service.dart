@@ -304,6 +304,28 @@ class RequestService {
     return counts;
   }
 
+  /// Total approved amount for the current calendar month, recomputed fresh
+  /// each month (based on when the request was approved, not when it was
+  /// submitted or travelled).
+  Future<double> getApprovedAmountForCurrentMonth() async {
+    final employeeId = _client.auth.currentUser!.id;
+    final now = DateTime.now();
+    final firstOfMonth = DateTime(now.year, now.month, 1);
+    final firstOfNextMonth = DateTime(now.year, now.month + 1, 1);
+
+    final rows = await _client
+        .from('requests')
+        .select('request_amount')
+        .eq('employee_id', employeeId)
+        .eq('is_deleted', false)
+        .eq('request_status', RequestStatus.approved.code)
+        .gte('approval_or_decline_time', firstOfMonth.toIso8601String())
+        .lt('approval_or_decline_time', firstOfNextMonth.toIso8601String());
+
+    return (rows as List<dynamic>)
+        .fold<double>(0, (sum, row) => sum + (row['request_amount'] as num).toDouble());
+  }
+
   /// A manager's pending-approval queue: their direct reports' requests
   /// (plus, for tier-2 managers, requests already forwarded by a first-line
   /// manager reporting to them) — RLS on `requests` already scopes this.
@@ -367,6 +389,23 @@ class RequestService {
       'request_amount': finalAmount,
       'approval_or_decline_time': now.toIso8601String(),
     }).eq('id', request.id!);
+  }
+
+  /// Approves several requests at once (e.g. "select all this month's
+  /// pending requests and approve"), keeping each one's extra costs exactly
+  /// as they already are (all accepted by default) — bulk approval doesn't
+  /// offer a per-line accept/reject step like the single-request review does.
+  Future<void> approveMultiple({
+    required List<ExpenseRequest> requests,
+    required ManagerType approvingManagerType,
+  }) async {
+    for (final request in requests) {
+      await approveRequest(
+        request: request,
+        approvingManagerType: approvingManagerType,
+        extraCostDecisions: request.extraCosts,
+      );
+    }
   }
 
   Future<void> declineRequest({required int requestId, required String notes}) async {

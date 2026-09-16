@@ -89,25 +89,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   Center(
                     child: Column(
                       children: [
-                        Container(
-                          width: 84,
-                          height: 84,
-                          decoration: const BoxDecoration(
-                            color: PharcoColors.orange,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.directions_car_filled, color: Colors.white, size: 40),
+                        Image.asset(
+                          'assets/images/login_logo.png',
+                          height: 160,
                         ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'PHARCO',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: PharcoColors.charcoal,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
+                        const SizedBox(height: 2),
                         const Text(
                           'EXPENSES',
                           style: TextStyle(

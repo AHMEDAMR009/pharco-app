@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers.dart';
+import '../../core/theme.dart';
 
 final _teamProvider = FutureProvider((ref) async {
   final me = await ref.watch(myProfileProvider.future);
@@ -27,8 +28,21 @@ class TeamPage extends ConsumerWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, i) {
               final e = team[i];
+              final avatarUrl =
+                  e.avatarPath != null ? ref.read(storageServiceProvider).avatarPublicUrl(e.avatarPath!) : null;
               return Card(
                 child: ListTile(
+                  leading: CircleAvatar(
+                    radius: 18,
+                    backgroundColor: PharcoColors.orange,
+                    backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                    child: avatarUrl == null
+                        ? Text(
+                            e.fullName.isNotEmpty ? e.fullName[0].toUpperCase() : '?',
+                            style: const TextStyle(color: Colors.white, fontSize: 14),
+                          )
+                        : null,
+                  ),
                   title: Text(e.fullName),
                   subtitle: Text('${e.code} • ${e.titleName ?? ''}'),
                   trailing: const Icon(Icons.chevron_right),

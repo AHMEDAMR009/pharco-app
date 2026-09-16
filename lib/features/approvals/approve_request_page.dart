@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/request.dart';
 import '../../services/request_service.dart';
+import '../../widgets/receipt_thumbnail.dart';
 import '../../widgets/status_badge.dart';
 import 'employee_requests_page.dart';
 
@@ -124,12 +125,34 @@ class _ApproveRequestPageState extends ConsumerState<ApproveRequestPage> {
                       const SizedBox(height: 20),
                       Text(isDecided ? 'Extra Costs' : 'Extra Costs (uncheck to reject a receipt)',
                           style: const TextStyle(fontWeight: FontWeight.w700)),
-                      ...r.extraCosts.map((e) => CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            value: _checkedOverrides[e.id] ?? e.isChecked,
-                            onChanged: isDecided ? null : (v) => setState(() => _checkedOverrides[e.id!] = v ?? true),
-                            title: Text(e.type.label),
-                            subtitle: Text('EGP ${e.amount.toStringAsFixed(2)}'),
+                      // A plain Row with its own Checkbox (rather than
+                      // CheckboxListTile, whose tap target spans the whole
+                      // row) so tapping the receipt thumbnail can't also
+                      // toggle the checkbox underneath it.
+                      ...r.extraCosts.map((e) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: _checkedOverrides[e.id] ?? e.isChecked,
+                                  onChanged:
+                                      isDecided ? null : (v) => setState(() => _checkedOverrides[e.id!] = v ?? true),
+                                ),
+                                const SizedBox(width: 4),
+                                ReceiptThumbnail(path: e.invoiceImagePath),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(e.type.label),
+                                      Text('EGP ${e.amount.toStringAsFixed(2)}',
+                                          style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           )),
                     ],
                     if (r.status == RequestStatus.declined && r.notes != null && r.notes!.isNotEmpty) ...[

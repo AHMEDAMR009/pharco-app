@@ -30,4 +30,9 @@ final requestCountsProvider = FutureProvider((ref) {
   return ref.watch(requestServiceProvider).getRequestCountsByStatus();
 });
 
+final approvedAmountThisMonthProvider = FutureProvider((ref) {
+  ref.watch(authStateProvider);
+  return ref.watch(requestServiceProvider).getApprovedAmountForCurrentMonth();
+});
+
 bool get isSignedIn => supabase.auth.currentSession != null;
