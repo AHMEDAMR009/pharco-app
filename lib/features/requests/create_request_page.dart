@@ -11,6 +11,7 @@ import '../../services/request_calculator.dart';
 import '../../services/request_service.dart';
 
 final _citiesProvider = FutureProvider((ref) => ref.watch(lookupServiceProvider).getCities());
+final _governoratesProvider = FutureProvider((ref) => ref.watch(lookupServiceProvider).getGovernorates());
 
 class CreateRequestPage extends ConsumerStatefulWidget {
   const CreateRequestPage({super.key});
@@ -21,14 +22,31 @@ class CreateRequestPage extends ConsumerStatefulWidget {
 
 class _CreateRequestPageState extends ConsumerState<CreateRequestPage> {
   RequestType _requestType = RequestType.fieldVisit;
+
+  Governorate? _firstFromGov;
   City? _firstFromCity;
+  Governorate? _firstToGov;
   City? _firstToCity;
   DateTime _firstDateTravel = DateTime.now();
+
+  Governorate? _secondFromGov;
   City? _secondFromCity;
+  Governorate? _secondToGov;
   City? _secondToCity;
   DateTime _secondDateTravel = DateTime.now();
+
   final List<RequestExtraCost> _extraCosts = [];
   bool _isSubmitting = false;
+
+  /// Any leg pointing at a real city (not "home address") — per business
+  /// rule, this locks out the Tickets/Allowance extra-cost types.
+  bool get _anyLocationChosen =>
+      _firstFromGov != null || _firstToGov != null || _secondFromGov != null || _secondToGov != null;
+
+  /// Tickets/Allowance already added — per business rule, this locks the
+  /// trip legs to "home address" (no governorate/city selection).
+  bool get _hasTicketsOrAllowance =>
+      _extraCosts.any((e) => e.type == ExtraCostType.tickets || e.type == ExtraCostType.allowance);
 
   Future<void> _pickDate({required bool isFirst}) async {
     final picked = await showDatePicker(
@@ -47,13 +65,22 @@ class _CreateRequestPageState extends ConsumerState<CreateRequestPage> {
     });
   }
 
-  void _addExtraCost() async {
+  List<ExtraCostType> _allowedExtraTypes(int titleId) {
+    final usedTypes = _extraCosts.map((e) => e.type).toSet();
+    return ExtraCostType.allowedFor(requestType: _requestType, titleId: titleId).where((t) {
+      if (usedTypes.contains(t)) return false; // one of each type per request
+      if (_anyLocationChosen && (t == ExtraCostType.tickets || t == ExtraCostType.allowance)) return false;
+      return true;
+    }).toList();
+  }
+
+  void _addExtraCost(List<ExtraCostType> allowedTypes) async {
     final profile = ref.read(myProfileProvider).value;
     final result = await showModalBottomSheet<RequestExtraCost>(
       context: context,
       isScrollControlled: true,
       builder: (_) => _AddExtraCostSheet(
-        requestType: _requestType,
+        allowedTypes: allowedTypes,
         employeeId: profile?.id,
       ),
     );
@@ -105,117 +132,165 @@ class _CreateRequestPageState extends ConsumerState<CreateRequestPage> {
   @override
   Widget build(BuildContext context) {
     final citiesAsync = ref.watch(_citiesProvider);
+    final governoratesAsync = ref.watch(_governoratesProvider);
     final profileAsync = ref.watch(myProfileProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('New Expense Request')),
       body: citiesAsync.when(
         data: (cities) {
-          final citiesById = {for (final c in cities) c.id: c};
-          final allowedExtraTypes = profileAsync.maybeWhen(
-            data: (p) => ExtraCostType.allowedFor(requestType: _requestType, titleId: p.titleId ?? 0),
-            orElse: () => ExtraCostType.values,
-          );
+          return governoratesAsync.when(
+            data: (governorates) {
+              final citiesById = {for (final c in cities) c.id: c};
+              final sortedGovs = [...governorates]..sort((a, b) => a.nameEn.compareTo(b.nameEn));
+              final titleId = profileAsync.maybeWhen(data: (p) => p.titleId ?? 0, orElse: () => 0);
+              final allowedExtraTypes = _allowedExtraTypes(titleId);
+              final legsLocked = _hasTicketsOrAllowance;
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              const Text('Request Type', style: TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: RequestType.values.map((t) {
-                  final selected = _requestType == t;
-                  return ChoiceChip(
-                    label: Text(t.label),
-                    selected: selected,
-                    onSelected: (_) => setState(() => _requestType = t),
-                    selectedColor: PharcoColors.orange,
-                    labelStyle: TextStyle(color: selected ? Colors.white : PharcoColors.charcoal),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 24),
-              const Text('Outbound Trip', style: TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              _CityDropdown(
-                label: 'From (blank = home address)',
-                cities: cities,
-                value: _firstFromCity,
-                onChanged: (c) => setState(() => _firstFromCity = c),
-              ),
-              const SizedBox(height: 12),
-              _CityDropdown(
-                label: 'To (blank = home address)',
-                cities: cities,
-                value: _firstToCity,
-                onChanged: (c) => setState(() => _firstToCity = c),
-              ),
-              const SizedBox(height: 12),
-              _DatePickerTile(
-                label: 'Outbound date',
-                date: _firstDateTravel,
-                onTap: () => _pickDate(isFirst: true),
-              ),
-              const SizedBox(height: 24),
-              const Text('Return Trip', style: TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              _CityDropdown(
-                label: 'From (blank = home address)',
-                cities: cities,
-                value: _secondFromCity,
-                onChanged: (c) => setState(() => _secondFromCity = c),
-              ),
-              const SizedBox(height: 12),
-              _CityDropdown(
-                label: 'To (blank = home address)',
-                cities: cities,
-                value: _secondToCity,
-                onChanged: (c) => setState(() => _secondToCity = c),
-              ),
-              const SizedBox(height: 12),
-              _DatePickerTile(
-                label: 'Return date',
-                date: _secondDateTravel,
-                onTap: () => _pickDate(isFirst: false),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              return ListView(
+                padding: const EdgeInsets.all(16),
                 children: [
-                  const Text('Extra Costs', style: TextStyle(fontWeight: FontWeight.w700)),
-                  TextButton.icon(
-                    onPressed: allowedExtraTypes.isEmpty ? null : _addExtraCost,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add'),
+                  const Text('Request Type', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: RequestType.values.map((t) {
+                      final selected = _requestType == t;
+                      return ChoiceChip(
+                        label: Text(t.label),
+                        selected: selected,
+                        onSelected: (_) => setState(() => _requestType = t),
+                        selectedColor: PharcoColors.orange,
+                        labelStyle: TextStyle(color: selected ? Colors.white : PharcoColors.charcoal),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text('Travel Trip', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  _GovernorateCityPicker(
+                    label: 'From',
+                    governorates: sortedGovs,
+                    allCities: cities,
+                    enabled: !legsLocked,
+                    selectedGovernorate: _firstFromGov,
+                    selectedCity: _firstFromCity,
+                    onGovernorateChanged: (g) => setState(() {
+                      _firstFromGov = g;
+                      _firstFromCity = null;
+                    }),
+                    onCityChanged: (c) => setState(() => _firstFromCity = c),
+                  ),
+                  const SizedBox(height: 12),
+                  _GovernorateCityPicker(
+                    label: 'To',
+                    governorates: sortedGovs,
+                    allCities: cities,
+                    enabled: !legsLocked,
+                    selectedGovernorate: _firstToGov,
+                    selectedCity: _firstToCity,
+                    onGovernorateChanged: (g) => setState(() {
+                      _firstToGov = g;
+                      _firstToCity = null;
+                    }),
+                    onCityChanged: (c) => setState(() => _firstToCity = c),
+                  ),
+                  const SizedBox(height: 12),
+                  _DatePickerTile(
+                    label: 'Travel date',
+                    date: _firstDateTravel,
+                    onTap: () => _pickDate(isFirst: true),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text('Return Trip', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  _GovernorateCityPicker(
+                    label: 'From',
+                    governorates: sortedGovs,
+                    allCities: cities,
+                    enabled: !legsLocked,
+                    selectedGovernorate: _secondFromGov,
+                    selectedCity: _secondFromCity,
+                    onGovernorateChanged: (g) => setState(() {
+                      _secondFromGov = g;
+                      _secondFromCity = null;
+                    }),
+                    onCityChanged: (c) => setState(() => _secondFromCity = c),
+                  ),
+                  const SizedBox(height: 12),
+                  _GovernorateCityPicker(
+                    label: 'To',
+                    governorates: sortedGovs,
+                    allCities: cities,
+                    enabled: !legsLocked,
+                    selectedGovernorate: _secondToGov,
+                    selectedCity: _secondToCity,
+                    onGovernorateChanged: (g) => setState(() {
+                      _secondToGov = g;
+                      _secondToCity = null;
+                    }),
+                    onCityChanged: (c) => setState(() => _secondToCity = c),
+                  ),
+                  const SizedBox(height: 12),
+                  _DatePickerTile(
+                    label: 'Return date',
+                    date: _secondDateTravel,
+                    onTap: () => _pickDate(isFirst: false),
+                  ),
+                  if (legsLocked) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Travel/Return locations are disabled because a Tickets or Allowance '
+                      'extra cost is already added — remove it to pick a location instead.',
+                      style: TextStyle(color: Colors.black54, fontSize: 12),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Extra Costs', style: TextStyle(fontWeight: FontWeight.w700)),
+                      TextButton.icon(
+                        onPressed: allowedExtraTypes.isEmpty ? null : () => _addExtraCost(allowedExtraTypes),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add'),
+                      ),
+                    ],
+                  ),
+                  if (_anyLocationChosen)
+                    const Text(
+                      'Tickets and Allowance aren\'t available once a travel location is chosen.',
+                      style: TextStyle(color: Colors.black54, fontSize: 12),
+                    ),
+                  ..._extraCosts.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final cost = entry.value;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(cost.type.label),
+                      subtitle: Text('EGP ${cost.amount.toStringAsFixed(2)}'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline, color: PharcoColors.danger),
+                        onPressed: () => setState(() => _extraCosts.removeAt(i)),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    onPressed: _isSubmitting ? null : () => _previewAndSubmit(citiesById),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            height: 20, width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Preview & Submit'),
                   ),
                 ],
-              ),
-              ..._extraCosts.asMap().entries.map((entry) {
-                final i = entry.key;
-                final cost = entry.value;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(cost.type.label),
-                  subtitle: Text('EGP ${cost.amount.toStringAsFixed(2)}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: PharcoColors.danger),
-                    onPressed: () => setState(() => _extraCosts.removeAt(i)),
-                  ),
-                );
-              }),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: _isSubmitting ? null : () => _previewAndSubmit(citiesById),
-                child: _isSubmitting
-                    ? const SizedBox(
-                        height: 20, width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('Preview & Submit'),
-              ),
-            ],
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Failed to load governorates: $e')),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -225,25 +300,60 @@ class _CreateRequestPageState extends ConsumerState<CreateRequestPage> {
   }
 }
 
-class _CityDropdown extends StatelessWidget {
+/// Two-step location picker: choose a governorate (or "Home address" to skip
+/// city selection entirely), then a city within it, sorted alphabetically.
+class _GovernorateCityPicker extends StatelessWidget {
   final String label;
-  final List<City> cities;
-  final City? value;
-  final ValueChanged<City?> onChanged;
+  final List<Governorate> governorates;
+  final List<City> allCities;
+  final bool enabled;
+  final Governorate? selectedGovernorate;
+  final City? selectedCity;
+  final ValueChanged<Governorate?> onGovernorateChanged;
+  final ValueChanged<City?> onCityChanged;
 
-  const _CityDropdown({required this.label, required this.cities, required this.value, required this.onChanged});
+  const _GovernorateCityPicker({
+    required this.label,
+    required this.governorates,
+    required this.allCities,
+    required this.enabled,
+    required this.selectedGovernorate,
+    required this.selectedCity,
+    required this.onGovernorateChanged,
+    required this.onCityChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<City?>(
-      value: value,
-      decoration: InputDecoration(labelText: label),
-      isExpanded: true,
-      items: [
-        const DropdownMenuItem<City?>(value: null, child: Text('Home address')),
-        ...cities.map((c) => DropdownMenuItem<City?>(value: c, child: Text(c.nameEn))),
+    final citiesInGov = selectedGovernorate == null
+        ? const <City>[]
+        : (allCities.where((c) => c.governorateId == selectedGovernorate!.id).toList()
+          ..sort((a, b) => a.nameEn.compareTo(b.nameEn)));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<Governorate?>(
+          value: selectedGovernorate,
+          decoration: InputDecoration(labelText: label),
+          isExpanded: true,
+          items: [
+            const DropdownMenuItem<Governorate?>(value: null, child: Text('Home address')),
+            ...governorates.map((g) => DropdownMenuItem<Governorate?>(value: g, child: Text(g.nameEn))),
+          ],
+          onChanged: enabled ? onGovernorateChanged : null,
+        ),
+        if (selectedGovernorate != null) ...[
+          const SizedBox(height: 8),
+          DropdownButtonFormField<City?>(
+            value: selectedCity,
+            decoration: const InputDecoration(labelText: 'City'),
+            isExpanded: true,
+            items: citiesInGov.map((c) => DropdownMenuItem<City?>(value: c, child: Text(c.nameEn))).toList(),
+            onChanged: enabled ? onCityChanged : null,
+          ),
+        ],
       ],
-      onChanged: onChanged,
     );
   }
 }
@@ -267,16 +377,16 @@ class _DatePickerTile extends StatelessWidget {
 }
 
 class _AddExtraCostSheet extends ConsumerStatefulWidget {
-  final RequestType requestType;
+  final List<ExtraCostType> allowedTypes;
   final String? employeeId;
-  const _AddExtraCostSheet({required this.requestType, required this.employeeId});
+  const _AddExtraCostSheet({required this.allowedTypes, required this.employeeId});
 
   @override
   ConsumerState<_AddExtraCostSheet> createState() => _AddExtraCostSheetState();
 }
 
 class _AddExtraCostSheetState extends ConsumerState<_AddExtraCostSheet> {
-  ExtraCostType _type = ExtraCostType.tollGate;
+  late ExtraCostType _type = widget.allowedTypes.first;
   final _amountController = TextEditingController();
   XFile? _receiptFile;
   bool _isUploading = false;
@@ -317,7 +427,6 @@ class _AddExtraCostSheetState extends ConsumerState<_AddExtraCostSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final allowed = ExtraCostType.allowedFor(requestType: widget.requestType, titleId: 0);
     return Padding(
       padding: EdgeInsets.only(
         left: 20, right: 20, top: 20,
@@ -330,9 +439,9 @@ class _AddExtraCostSheetState extends ConsumerState<_AddExtraCostSheet> {
           const Text('Add Extra Cost', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 16),
           DropdownButtonFormField<ExtraCostType>(
-            value: allowed.contains(_type) ? _type : allowed.first,
+            value: _type,
             decoration: const InputDecoration(labelText: 'Type'),
-            items: allowed.map((t) => DropdownMenuItem(value: t, child: Text(t.label))).toList(),
+            items: widget.allowedTypes.map((t) => DropdownMenuItem(value: t, child: Text(t.label))).toList(),
             onChanged: (t) => setState(() => _type = t!),
           ),
           const SizedBox(height: 16),

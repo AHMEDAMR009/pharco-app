@@ -12,7 +12,7 @@ class RequestExtraCost {
     required this.type,
     required this.amount,
     this.invoiceImagePath,
-    this.isChecked = true,
+    this.isChecked = false,
   });
 
   factory RequestExtraCost.fromJson(Map<String, dynamic> j) => RequestExtraCost(
@@ -20,7 +20,7 @@ class RequestExtraCost {
         type: ExtraCostType.fromCode(j['extra_cost_type'] as int),
         amount: (j['extra_cost'] as num).toDouble(),
         invoiceImagePath: j['invoice_image'] as String?,
-        isChecked: j['is_checked'] as bool? ?? true,
+        isChecked: j['is_checked'] as bool? ?? false,
       );
 
   Map<String, dynamic> toInsertJson(int requestId) => {
