@@ -192,8 +192,7 @@ class _ApproveRequestPageState extends ConsumerState<ApproveRequestPage> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(color: const Color(0xFFEAF1FB), borderRadius: BorderRadius.circular(12)),
                         child: const Text(
-                          "This request hasn't been approved by the employee's direct manager yet — it can't be "
-                          "acted on out of order.",
+                          "This request hasn't been approved by the employee's direct manager yet.",
                         ),
                       ),
                     ] else if (isDecided) ...[

@@ -91,6 +91,20 @@ class RequestService {
     }
   }
 
+  /// Requests can only be created for the current calendar month, up to
+  /// today — no future dates, and once a month ends it can no longer be
+  /// filed for (mirrors the create-request date picker's own bounds).
+  void _assertWithinCreatableRange(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final firstOfMonth = DateTime(now.year, now.month, 1);
+    if (date.isBefore(firstOfMonth) || date.isAfter(today)) {
+      throw RequestValidationError(
+        'You can only create requests for the current month, up to today\'s date',
+      );
+    }
+  }
+
   Future<void> _assertMonthlyQuotaNotExceeded(Employee employee) async {
     final quota = await _lookupService.getMonthlyQuota(employee.territoryId);
     final now = DateTime.now();
@@ -151,6 +165,8 @@ class RequestService {
         'Your return date must be on or after the start date',
       );
     }
+    _assertWithinCreatableRange(input.firstDateTravel);
+    _assertWithinCreatableRange(input.secondDateTravel);
 
     final employee = await _employeeService.getMyProfile();
 
@@ -441,12 +457,13 @@ class RequestService {
     }).eq('id', requestId);
   }
 
-  /// Business-cutoff rule: a manager can no longer approve/decline a request
-  /// from a previous month once the 3rd of the current month has passed.
+  /// Business-cutoff rule: a manager can approve/decline a request through
+  /// the rest of its own (creation) month, plus a 2-day grace period into
+  /// the next month — after day 2, it's locked.
   static bool isPastApprovalCutoff(DateTime requestCreatedAt) {
     final now = DateTime.now();
     final sameMonth = requestCreatedAt.year == now.year && requestCreatedAt.month == now.month;
     if (sameMonth) return false;
-    return now.day > 3;
+    return now.day > 2;
   }
 }

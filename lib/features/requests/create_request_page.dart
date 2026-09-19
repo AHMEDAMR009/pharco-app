@@ -13,6 +13,11 @@ import '../../services/request_service.dart';
 final _citiesProvider = FutureProvider((ref) => ref.watch(lookupServiceProvider).getCities());
 final _governoratesProvider = FutureProvider((ref) => ref.watch(lookupServiceProvider).getGovernorates());
 
+DateTime _today() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day);
+}
+
 class CreateRequestPage extends ConsumerStatefulWidget {
   const CreateRequestPage({super.key});
 
@@ -27,13 +32,13 @@ class _CreateRequestPageState extends ConsumerState<CreateRequestPage> {
   City? _firstFromCity;
   Governorate? _firstToGov;
   City? _firstToCity;
-  DateTime _firstDateTravel = DateTime.now();
+  DateTime _firstDateTravel = _today();
 
   Governorate? _secondFromGov;
   City? _secondFromCity;
   Governorate? _secondToGov;
   City? _secondToCity;
-  DateTime _secondDateTravel = DateTime.now();
+  DateTime _secondDateTravel = _today();
 
   final List<RequestExtraCost> _extraCosts = [];
   bool _isSubmitting = false;
@@ -49,11 +54,14 @@ class _CreateRequestPageState extends ConsumerState<CreateRequestPage> {
       _extraCosts.any((e) => e.type == ExtraCostType.tickets || e.type == ExtraCostType.allowance);
 
   Future<void> _pickDate({required bool isFirst}) async {
+    final today = _today();
     final picked = await showDatePicker(
       context: context,
       initialDate: isFirst ? _firstDateTravel : _secondDateTravel,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      // Once a month ends, requests for it can no longer be created —
+      // only the current calendar month, up to today, is selectable.
+      firstDate: DateTime(today.year, today.month, 1),
+      lastDate: today,
     );
     if (picked == null) return;
     setState(() {
@@ -407,6 +415,7 @@ class _AddExtraCostSheetState extends ConsumerState<_AddExtraCostSheet> {
   Future<void> _submit() async {
     final amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) return;
+    if (_receiptFile == null) return;
 
     String? invoiceImagePath;
     if (_receiptFile != null && widget.employeeId != null) {
@@ -470,13 +479,14 @@ class _AddExtraCostSheetState extends ConsumerState<_AddExtraCostSheet> {
               ),
             ],
           ),
-          if (_receiptFile != null) ...[
-            const SizedBox(height: 8),
-            const Text('Receipt attached ✓', style: TextStyle(color: PharcoColors.success)),
-          ],
+          const SizedBox(height: 8),
+          Text(
+            _receiptFile != null ? 'Receipt attached ✓' : 'A receipt photo is required to add an extra cost.',
+            style: TextStyle(color: _receiptFile != null ? PharcoColors.success : Colors.black54),
+          ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: _isUploading ? null : _submit,
+            onPressed: (_isUploading || _receiptFile == null) ? null : _submit,
             child: _isUploading
                 ? const SizedBox(
                     height: 20, width: 20,
