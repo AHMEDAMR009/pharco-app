@@ -12,22 +12,72 @@ final _myRequestsProvider =
   return ref.watch(requestServiceProvider).getMyRequests(statusFilter: status);
 });
 
-class MyRequestsPage extends ConsumerStatefulWidget {
+/// Whether my own direct manager is a first-line manager — i.e. whether my
+/// own requests pass through a second, tier-2 approval stage and need the
+/// extra "First Approved" tab (see the equivalent provider a manager's team
+/// view uses, in employee_requests_page.dart).
+final _myRequestsRequireSecondApprovalProvider = FutureProvider((ref) async {
+  final me = await ref.watch(myProfileProvider.future);
+  final tier = await ref.watch(employeeServiceProvider).getManagerTierOf(me.id);
+  return tier == ManagerType.firstLine;
+});
+
+const _allTabStatuses = <RequestStatus?>[
+  null,
+  RequestStatus.pending,
+  RequestStatus.pendingSecondApproval,
+  RequestStatus.approved,
+  RequestStatus.declined,
+];
+
+class MyRequestsPage extends ConsumerWidget {
   final RequestStatus? initialStatus;
   const MyRequestsPage({super.key, this.initialStatus});
 
   @override
-  ConsumerState<MyRequestsPage> createState() => _MyRequestsPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final requiresSecondApprovalAsync = ref.watch(_myRequestsRequireSecondApprovalProvider);
+    return requiresSecondApprovalAsync.when(
+      data: (requiresSecondApproval) => _TabbedMyRequestsView(
+        initialStatus: initialStatus,
+        requiresSecondApproval: requiresSecondApproval,
+      ),
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('My Requests')),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Scaffold(
+        appBar: AppBar(title: const Text('My Requests')),
+        body: Center(child: Text('Failed to load: $e')),
+      ),
+    );
+  }
 }
 
-class _MyRequestsPageState extends ConsumerState<MyRequestsPage> with SingleTickerProviderStateMixin {
+class _TabbedMyRequestsView extends ConsumerStatefulWidget {
+  final RequestStatus? initialStatus;
+  final bool requiresSecondApproval;
+  const _TabbedMyRequestsView({required this.initialStatus, required this.requiresSecondApproval});
+
+  @override
+  ConsumerState<_TabbedMyRequestsView> createState() => _TabbedMyRequestsViewState();
+}
+
+class _TabbedMyRequestsViewState extends ConsumerState<_TabbedMyRequestsView> with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  static const _statuses = <RequestStatus?>[null, RequestStatus.pending, RequestStatus.approved, RequestStatus.declined];
-  static const _labels = ['All', 'Pending', 'Approved', 'Declined'];
+  late final List<RequestStatus?> _statuses;
+  late final List<String> _labels;
 
   @override
   void initState() {
     super.initState();
+    if (widget.requiresSecondApproval) {
+      _statuses = _allTabStatuses;
+      _labels = const ['All', 'Pending', 'First Approved', 'Approved', 'Declined'];
+    } else {
+      _statuses = const [null, RequestStatus.pending, RequestStatus.approved, RequestStatus.declined];
+      _labels = const ['All', 'Pending', 'Approved', 'Declined'];
+    }
     final initialIndex = _statuses.indexOf(widget.initialStatus);
     _tabController = TabController(
       length: _statuses.length,

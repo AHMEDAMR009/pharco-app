@@ -95,11 +95,20 @@ class _ApproveRequestPageState extends ConsumerState<ApproveRequestPage> {
       body: requestAsync.when(
         data: (r) {
           final me = ref.watch(myProfileProvider).valueOrNull;
+          final requiresSecondApproval = ref.watch(requiresSecondApprovalProvider(widget.employeeId)).valueOrNull ?? false;
           // A first-line manager who already forwarded this request has
           // nothing left to do; only the tier-2 manager it's now waiting on
           // can still act on it.
           final forwardedByMe = r.status == RequestStatus.pendingSecondApproval && me?.managerType == ManagerType.firstLine;
-          final isDecided = r.status == RequestStatus.approved || r.status == RequestStatus.declined || forwardedByMe;
+          // A still-plain-Pending request from a two-tier employee hasn't
+          // been through their first-line manager yet — nobody else can
+          // approve/decline it out of order.
+          final awaitingFirstApproval =
+              r.status == RequestStatus.pending && requiresSecondApproval && me?.managerType != ManagerType.firstLine;
+          final isDecided = r.status == RequestStatus.approved ||
+              r.status == RequestStatus.declined ||
+              forwardedByMe ||
+              awaitingFirstApproval;
           final pastCutoff = r.createdAt != null && RequestService.isPastApprovalCutoff(r.createdAt!);
           final isLocked = isDecided || pastCutoff;
           return Column(
@@ -115,7 +124,7 @@ class _ApproveRequestPageState extends ConsumerState<ApproveRequestPage> {
                       children: [
                         Text(r.requestType.label),
                         const SizedBox(width: 8),
-                        StatusBadge(status: r.status, managerView: true),
+                        StatusBadge(status: r.status),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -175,6 +184,16 @@ class _ApproveRequestPageState extends ConsumerState<ApproveRequestPage> {
                         decoration: BoxDecoration(color: const Color(0xFFF0F0F0), borderRadius: BorderRadius.circular(12)),
                         child: const Text(
                           "You've approved this request and forwarded it for second-level approval — no further action needed from you.",
+                        ),
+                      ),
+                    ] else if (awaitingFirstApproval) ...[
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: const Color(0xFFEAF1FB), borderRadius: BorderRadius.circular(12)),
+                        child: const Text(
+                          "This request hasn't been approved by the employee's direct manager yet — it can't be "
+                          "acted on out of order.",
                         ),
                       ),
                     ] else if (isDecided) ...[

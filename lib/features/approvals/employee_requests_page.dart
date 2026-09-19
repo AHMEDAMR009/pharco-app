@@ -15,8 +15,10 @@ final employeeRequestsProvider = FutureProvider.family<List<ExpenseRequest>, Emp
 
 /// Whether [employeeId]'s own direct manager is a first-line manager — i.e.
 /// whether this employee's requests always pass through a second, tier-2
-/// approval stage and therefore need the extra "First Approved" tab.
-final _requiresSecondApprovalProvider = FutureProvider.family<bool, String>((ref, employeeId) async {
+/// approval stage and therefore need the extra "First Approved" tab, and a
+/// still-plain-Pending request can't yet be acted on by anyone above that
+/// first-line manager.
+final requiresSecondApprovalProvider = FutureProvider.family<bool, String>((ref, employeeId) async {
   final tier = await ref.watch(employeeServiceProvider).getManagerTierOf(employeeId);
   return tier == ManagerType.firstLine;
 });
@@ -45,7 +47,7 @@ class EmployeeRequestsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final requiresSecondApprovalAsync = ref.watch(_requiresSecondApprovalProvider(employeeId));
+    final requiresSecondApprovalAsync = ref.watch(requiresSecondApprovalProvider(employeeId));
     return requiresSecondApprovalAsync.when(
       data: (requiresSecondApproval) => _TabbedRequestsView(
         employeeId: employeeId,
@@ -117,7 +119,10 @@ class _TabbedRequestsViewState extends ConsumerState<_TabbedRequestsView> with S
         controller: _tabController,
         children: _statuses.map((status) {
           if (status == RequestStatus.pending) {
-            return _PendingRequestsList(employeeId: widget.employeeId);
+            return _PendingRequestsList(
+              employeeId: widget.employeeId,
+              requiresSecondApproval: widget.requiresSecondApproval,
+            );
           }
           return _EmployeeRequestsList(employeeId: widget.employeeId, status: status);
         }).toList(),
@@ -149,7 +154,6 @@ class _EmployeeRequestsList extends ConsumerWidget {
               final r = requests[i];
               return RequestCard(
                 request: r,
-                managerView: true,
                 onTap: () => context.push('/team/$employeeId/requests/${r.id}'),
               );
             },
@@ -169,7 +173,8 @@ class _EmployeeRequestsList extends ConsumerWidget {
 /// unlike opening a single request.
 class _PendingRequestsList extends ConsumerStatefulWidget {
   final String employeeId;
-  const _PendingRequestsList({required this.employeeId});
+  final bool requiresSecondApproval;
+  const _PendingRequestsList({required this.employeeId, required this.requiresSecondApproval});
 
   @override
   ConsumerState<_PendingRequestsList> createState() => _PendingRequestsListState();
@@ -224,11 +229,36 @@ class _PendingRequestsListState extends ConsumerState<_PendingRequestsList> {
   Widget build(BuildContext context) {
     final params = (employeeId: widget.employeeId, status: RequestStatus.pending);
     final requestsAsync = ref.watch(employeeRequestsProvider(params));
+    final me = ref.watch(myProfileProvider).valueOrNull;
+    // A plain-Pending request from an employee whose chain needs two
+    // approvals hasn't been touched by their first-line manager yet — only
+    // that manager can act on it here; everyone else just gets to look.
+    final canAct = !widget.requiresSecondApproval || me?.managerType == ManagerType.firstLine;
 
     final body = requestsAsync.when(
       data: (requests) {
         if (requests.isEmpty) {
           return const Center(child: Text('No requests here yet'));
+        }
+        if (!canAct) {
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: const Color(0xFFEAF1FB), borderRadius: BorderRadius.circular(12)),
+                child: const Text(
+                  "These requests haven't been approved by this employee's direct manager yet — "
+                  "they'll show up here for you once that happens.",
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...requests.map((r) => RequestCard(
+                    request: r,
+                    onTap: () => context.push('/team/${widget.employeeId}/requests/${r.id}'),
+                  )),
+            ],
+          );
         }
 
         final currentMonthRequests = requests.where((r) => _isCurrentMonth(r.firstDateTravel)).toList();
@@ -283,7 +313,6 @@ class _PendingRequestsListState extends ConsumerState<_PendingRequestsList> {
                         Expanded(
                           child: RequestCard(
                             request: r,
-                            managerView: true,
                             onTap: () => context.push('/team/${widget.employeeId}/requests/${r.id}'),
                           ),
                         ),

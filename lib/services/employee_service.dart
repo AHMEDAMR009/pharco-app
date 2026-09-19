@@ -56,16 +56,13 @@ class EmployeeService {
   /// have no manager on file. A `firstLine` result means this employee's
   /// requests always pass through a second, tier-2 approval stage.
   ///
-  /// Two plain lookups rather than a self-join embed: `employees.manager_id`
-  /// references `employees.id`, and PostgREST can't disambiguate the join
-  /// direction for a self-referencing FK from the column name alone.
+  /// Goes through the `manager_tier_of` RPC (security definer) rather than
+  /// selecting the manager's row directly: RLS on `employees` only lets an
+  /// employee read their own row or their reports' rows, not their manager's
+  /// row upward, so a plain select silently comes back empty for anyone
+  /// who isn't themselves a manager.
   Future<ManagerType?> getManagerTierOf(String employeeId) async {
-    final row = await _client.from('employees').select('manager_id').eq('id', employeeId).maybeSingle();
-    final managerId = row?['manager_id'] as String?;
-    if (managerId == null) return null;
-
-    final managerRow = await _client.from('employees').select('manager_type').eq('id', managerId).maybeSingle();
-    final code = managerRow?['manager_type'] as int?;
+    final code = await _client.rpc('manager_tier_of', params: {'emp': employeeId}) as int?;
     return code == null ? null : ManagerType.fromCode(code);
   }
 

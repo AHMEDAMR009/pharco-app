@@ -15,8 +15,10 @@ enum RequestType {
       RequestType.values.firstWhere((e) => e.code == code, orElse: () => RequestType.fieldVisit);
 }
 
-/// 5 (PendingSecondApproval) is shown as "Pending" to the employee but is a
-/// distinct pipeline stage for the manager-approval chain.
+/// 5 (PendingSecondApproval) is a distinct pipeline stage — a first-line
+/// manager has approved but a tier-2 manager still needs to finalize it.
+/// `.label` is the raw DB-ish value ("Pending"); UI code shows it as
+/// "First Approved" instead (see [StatusBadge]) so the handoff is visible.
 enum RequestStatus {
   pending(1, 'Pending'),
   approved(2, 'Approved'),

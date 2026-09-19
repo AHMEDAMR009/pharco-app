@@ -263,9 +263,9 @@ class RequestService {
     return ExpenseRequest.fromJson(row);
   }
 
-  /// Employee's own request list, optionally filtered by status.
-  /// Passing [RequestStatus.pending] also matches status 5
-  /// (pendingSecondApproval), mirroring the original "Pending" filter.
+  /// Employee's own request list, optionally filtered by status. "Pending"
+  /// and "First Approved" (pendingSecondApproval) are distinct tabs, same as
+  /// a manager's team view — see [getTeamRequests].
   Future<List<ExpenseRequest>> getMyRequests({RequestStatus? statusFilter}) async {
     final employeeId = _client.auth.currentUser!.id;
     var q = _client
@@ -274,9 +274,7 @@ class RequestService {
         .eq('employee_id', employeeId)
         .eq('is_deleted', false);
 
-    if (statusFilter == RequestStatus.pending) {
-      q = q.inFilter('request_status', [RequestStatus.pending.code, RequestStatus.pendingSecondApproval.code]);
-    } else if (statusFilter != null) {
+    if (statusFilter != null) {
       q = q.eq('request_status', statusFilter.code);
     }
 
@@ -346,6 +344,32 @@ class RequestService {
     }
     final rows = await q.order('created_at', ascending: false);
     return (rows as List<dynamic>).map((e) => ExpenseRequest.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// This month's request counts by status for each of [employeeIds] — used
+  /// to sort "My Team" so employees needing action float to the top.
+  Future<Map<String, Map<RequestStatus, int>>> getMonthlyStatusCounts(List<String> employeeIds) async {
+    if (employeeIds.isEmpty) return {};
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month, 1).toIso8601String().split('T').first;
+    final monthEnd = DateTime(now.year, now.month + 1, 1).toIso8601String().split('T').first;
+
+    final rows = await _client
+        .from('requests')
+        .select('employee_id, request_status')
+        .inFilter('employee_id', employeeIds)
+        .eq('is_deleted', false)
+        .gte('first_date_travel', monthStart)
+        .lt('first_date_travel', monthEnd);
+
+    final counts = <String, Map<RequestStatus, int>>{};
+    for (final row in rows as List<dynamic>) {
+      final id = row['employee_id'] as String;
+      final status = RequestStatus.fromCode(row['request_status'] as int);
+      final byStatus = counts.putIfAbsent(id, () => {});
+      byStatus[status] = (byStatus[status] ?? 0) + 1;
+    }
+    return counts;
   }
 
   // ---------------------------------------------------------------------
