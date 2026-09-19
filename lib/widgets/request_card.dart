@@ -8,12 +8,14 @@ class RequestCard extends StatelessWidget {
   final ExpenseRequest request;
   final VoidCallback? onTap;
   final bool showEmployeeName;
+  final bool managerView;
 
   const RequestCard({
     super.key,
     required this.request,
     this.onTap,
     this.showEmployeeName = false,
+    this.managerView = false,
   });
 
   @override
@@ -38,7 +40,7 @@ class RequestCard extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                     ),
                   ),
-                  StatusBadge(status: request.status),
+                  StatusBadge(status: request.status, managerView: managerView),
                 ],
               ),
               if (showEmployeeName && request.employeeName != null) ...[

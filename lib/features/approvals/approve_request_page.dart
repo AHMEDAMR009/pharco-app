@@ -94,7 +94,12 @@ class _ApproveRequestPageState extends ConsumerState<ApproveRequestPage> {
       appBar: AppBar(title: const Text('Review Request')),
       body: requestAsync.when(
         data: (r) {
-          final isDecided = r.status == RequestStatus.approved || r.status == RequestStatus.declined;
+          final me = ref.watch(myProfileProvider).valueOrNull;
+          // A first-line manager who already forwarded this request has
+          // nothing left to do; only the tier-2 manager it's now waiting on
+          // can still act on it.
+          final forwardedByMe = r.status == RequestStatus.pendingSecondApproval && me?.managerType == ManagerType.firstLine;
+          final isDecided = r.status == RequestStatus.approved || r.status == RequestStatus.declined || forwardedByMe;
           final pastCutoff = r.createdAt != null && RequestService.isPastApprovalCutoff(r.createdAt!);
           final isLocked = isDecided || pastCutoff;
           return Column(
@@ -110,7 +115,7 @@ class _ApproveRequestPageState extends ConsumerState<ApproveRequestPage> {
                       children: [
                         Text(r.requestType.label),
                         const SizedBox(width: 8),
-                        StatusBadge(status: r.status),
+                        StatusBadge(status: r.status, managerView: true),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -163,7 +168,16 @@ class _ApproveRequestPageState extends ConsumerState<ApproveRequestPage> {
                         child: Text('Rejection reason: ${r.notes}'),
                       ),
                     ],
-                    if (isDecided) ...[
+                    if (forwardedByMe) ...[
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: const Color(0xFFF0F0F0), borderRadius: BorderRadius.circular(12)),
+                        child: const Text(
+                          "You've approved this request and forwarded it for second-level approval — no further action needed from you.",
+                        ),
+                      ),
+                    ] else if (isDecided) ...[
                       const SizedBox(height: 20),
                       Container(
                         padding: const EdgeInsets.all(12),

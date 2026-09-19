@@ -339,9 +339,9 @@ class RequestService {
         .select(_listSelect)
         .eq('employee_id', employeeId)
         .eq('is_deleted', false);
-    if (statusFilter == RequestStatus.pending) {
-      q = q.inFilter('request_status', [RequestStatus.pending.code, RequestStatus.pendingSecondApproval.code]);
-    } else if (statusFilter != null) {
+    // Unlike getMyRequests, "Pending" and "First Approved" (pendingSecondApproval)
+    // are shown to managers as distinct tabs, so each filters to its own status.
+    if (statusFilter != null) {
       q = q.eq('request_status', statusFilter.code);
     }
     final rows = await q.order('created_at', ascending: false);

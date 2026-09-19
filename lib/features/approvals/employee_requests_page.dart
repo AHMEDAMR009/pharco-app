@@ -13,32 +13,86 @@ final employeeRequestsProvider = FutureProvider.family<List<ExpenseRequest>, Emp
   return ref.watch(requestServiceProvider).getTeamRequests(employeeId: params.employeeId, statusFilter: params.status);
 });
 
+/// Whether [employeeId]'s own direct manager is a first-line manager — i.e.
+/// whether this employee's requests always pass through a second, tier-2
+/// approval stage and therefore need the extra "First Approved" tab.
+final _requiresSecondApprovalProvider = FutureProvider.family<bool, String>((ref, employeeId) async {
+  final tier = await ref.watch(employeeServiceProvider).getManagerTierOf(employeeId);
+  return tier == ManagerType.firstLine;
+});
+
+const _allTabStatuses = <RequestStatus?>[
+  null,
+  RequestStatus.pending,
+  RequestStatus.pendingSecondApproval,
+  RequestStatus.approved,
+  RequestStatus.declined,
+];
+
 /// Invalidates every status-tab variant of [employeeRequestsProvider] for one
 /// employee — call this after an approve/decline action so whichever tab the
 /// manager returns to shows the fresh status.
 void invalidateEmployeeRequests(WidgetRef ref, String employeeId) {
-  for (final status in <RequestStatus?>[null, RequestStatus.pending, RequestStatus.approved, RequestStatus.declined]) {
+  for (final status in _allTabStatuses) {
     ref.invalidate(employeeRequestsProvider((employeeId: employeeId, status: status)));
   }
 }
 
-class EmployeeRequestsPage extends ConsumerStatefulWidget {
+class EmployeeRequestsPage extends ConsumerWidget {
   final String employeeId;
   final String employeeName;
   const EmployeeRequestsPage({super.key, required this.employeeId, required this.employeeName});
 
   @override
-  ConsumerState<EmployeeRequestsPage> createState() => _EmployeeRequestsPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final requiresSecondApprovalAsync = ref.watch(_requiresSecondApprovalProvider(employeeId));
+    return requiresSecondApprovalAsync.when(
+      data: (requiresSecondApproval) => _TabbedRequestsView(
+        employeeId: employeeId,
+        employeeName: employeeName,
+        requiresSecondApproval: requiresSecondApproval,
+      ),
+      loading: () => Scaffold(
+        appBar: AppBar(title: Text(employeeName)),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Scaffold(
+        appBar: AppBar(title: Text(employeeName)),
+        body: Center(child: Text('Failed to load: $e')),
+      ),
+    );
+  }
 }
 
-class _EmployeeRequestsPageState extends ConsumerState<EmployeeRequestsPage> with SingleTickerProviderStateMixin {
+class _TabbedRequestsView extends ConsumerStatefulWidget {
+  final String employeeId;
+  final String employeeName;
+  final bool requiresSecondApproval;
+  const _TabbedRequestsView({
+    required this.employeeId,
+    required this.employeeName,
+    required this.requiresSecondApproval,
+  });
+
+  @override
+  ConsumerState<_TabbedRequestsView> createState() => _TabbedRequestsViewState();
+}
+
+class _TabbedRequestsViewState extends ConsumerState<_TabbedRequestsView> with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  static const _statuses = <RequestStatus?>[null, RequestStatus.pending, RequestStatus.approved, RequestStatus.declined];
-  static const _labels = ['All', 'Pending', 'Approved', 'Declined'];
+  late final List<RequestStatus?> _statuses;
+  late final List<String> _labels;
 
   @override
   void initState() {
     super.initState();
+    if (widget.requiresSecondApproval) {
+      _statuses = _allTabStatuses;
+      _labels = const ['All', 'Pending', 'First Approved', 'Approved', 'Declined'];
+    } else {
+      _statuses = const [null, RequestStatus.pending, RequestStatus.approved, RequestStatus.declined];
+      _labels = const ['All', 'Pending', 'Approved', 'Declined'];
+    }
     _tabController = TabController(length: _statuses.length, vsync: this);
   }
 
@@ -95,6 +149,7 @@ class _EmployeeRequestsList extends ConsumerWidget {
               final r = requests[i];
               return RequestCard(
                 request: r,
+                managerView: true,
                 onTap: () => context.push('/team/$employeeId/requests/${r.id}'),
               );
             },
@@ -228,6 +283,7 @@ class _PendingRequestsListState extends ConsumerState<_PendingRequestsList> {
                         Expanded(
                           child: RequestCard(
                             request: r,
+                            managerView: true,
                             onTap: () => context.push('/team/${widget.employeeId}/requests/${r.id}'),
                           ),
                         ),
