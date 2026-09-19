@@ -55,6 +55,7 @@ class RequestService {
     first_to_city:cities!requests_first_to_city_id_fkey ( name_en ),
     second_from_city:cities!requests_second_from_city_id_fkey ( name_en ),
     second_to_city:cities!requests_second_to_city_id_fkey ( name_en ),
+    employees ( full_name, titles ( meal_cost ) ),
     request_extra_costs ( * )
   ''';
 
@@ -335,7 +336,7 @@ class RequestService {
   }) async {
     var q = _client
         .from('requests')
-        .select('$_listSelect, employees ( full_name )')
+        .select(_listSelect)
         .eq('employee_id', employeeId)
         .eq('is_deleted', false);
     if (statusFilter == RequestStatus.pending) {

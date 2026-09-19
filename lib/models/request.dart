@@ -66,6 +66,7 @@ class ExpenseRequest {
   final String? secondFromCityName;
   final String? secondToCityName;
   final String? employeeName;
+  final double? mealCost;
 
   ExpenseRequest({
     this.id,
@@ -93,7 +94,12 @@ class ExpenseRequest {
     this.secondFromCityName,
     this.secondToCityName,
     this.employeeName,
+    this.mealCost,
   });
+
+  /// Total cost of the meals granted on this request, using the employee's
+  /// per-meal rate at the time it's viewed (title meal rates rarely change).
+  double get mealsCost => mealsCount * (mealCost ?? 0);
 
   factory ExpenseRequest.fromJson(Map<String, dynamic> j) => ExpenseRequest(
         id: j['id'] as int?,
@@ -126,6 +132,9 @@ class ExpenseRequest {
         secondFromCityName: (j['second_from_city'] as Map<String, dynamic>?)?['name_en'] as String?,
         secondToCityName: (j['second_to_city'] as Map<String, dynamic>?)?['name_en'] as String?,
         employeeName: (j['employees'] as Map<String, dynamic>?)?['full_name'] as String?,
+        mealCost: (((j['employees'] as Map<String, dynamic>?)?['titles'] as Map<String, dynamic>?)?['meal_cost']
+                as num?)
+            ?.toDouble(),
       );
 
   /// Employee-facing status label: statuses 1 and 5 both read as "Pending".

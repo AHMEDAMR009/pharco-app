@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../core/enums.dart';
 import '../../core/providers.dart';
 import '../../widgets/receipt_thumbnail.dart';
 import '../../widgets/status_badge.dart';
@@ -61,7 +62,7 @@ class RequestDetailsPage extends ConsumerWidget {
                 _row('Travel distance', '${r.travelDistance.toStringAsFixed(1)} km'),
                 _row('Return distance', '${r.returnDistance.toStringAsFixed(1)} km'),
                 _row('Billable distance', '${r.finalDistance.toStringAsFixed(1)} km'),
-                _row('Meals', '${r.mealsCount}'),
+                _row('Meals (${r.mealsCount})', 'EGP ${r.mealsCost.toStringAsFixed(2)}'),
                 _row('Extra costs', 'EGP ${r.extraCost.toStringAsFixed(2)}'),
                 _row('Total amount', 'EGP ${r.requestAmount.toStringAsFixed(2)}', bold: true),
               ],
@@ -71,20 +72,28 @@ class RequestDetailsPage extends ConsumerWidget {
               _SectionCard(
                 title: 'Extra Cost Items',
                 rows: r.extraCosts
-                    .map<Widget>((e) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            children: [
-                              ReceiptThumbnail(path: e.invoiceImagePath),
-                              if (e.invoiceImagePath != null) const SizedBox(width: 12),
-                              Expanded(child: Text(e.type.label, style: const TextStyle(color: Colors.black54))),
-                              Text(
-                                'EGP ${e.amount.toStringAsFixed(2)}${e.isChecked ? '' : ' (rejected)'}',
-                                style: const TextStyle(fontWeight: FontWeight.w500),
-                              ),
-                            ],
-                          ),
-                        ))
+                    .map<Widget>((e) {
+                      // "Rejected" only means something once a manager has actually
+                      // reviewed the request; while still pending, nothing has been
+                      // accepted or declined yet.
+                      final isDecided = r.status != RequestStatus.pending &&
+                          r.status != RequestStatus.pendingSecondApproval;
+                      final suffix = (isDecided && !e.isChecked) ? ' (rejected)' : '';
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          children: [
+                            ReceiptThumbnail(path: e.invoiceImagePath),
+                            if (e.invoiceImagePath != null) const SizedBox(width: 12),
+                            Expanded(child: Text(e.type.label, style: const TextStyle(color: Colors.black54))),
+                            Text(
+                              'EGP ${e.amount.toStringAsFixed(2)}$suffix',
+                              style: const TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      );
+                    })
                     .toList(),
               ),
             ],
