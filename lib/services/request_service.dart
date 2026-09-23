@@ -150,6 +150,7 @@ class RequestService {
       employeeId: employee.id,
       fromCoord: fromCoord,
       toCoord: toCoord,
+      googleApiKey: AppConfig.googleMapsApiKey,
     );
   }
 

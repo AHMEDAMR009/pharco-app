@@ -122,8 +122,15 @@ With a device/emulator connected (`flutter devices` to check):
 flutter run \
   --dart-define=SUPABASE_URL=https://xxxx.supabase.co \
   --dart-define=SUPABASE_ANON_KEY=xxxx \
-  --dart-define=GOOGLE_MAPS_API_KEY=xxxx   # optional
+  --dart-define=GOOGLE_MAPS_API_KEY=xxxx
 ```
+
+`GOOGLE_MAPS_API_KEY` needs the Directions API enabled and billing set up on
+that Google Cloud project. Without it, every travel/return distance silently
+falls back to straight-line (Haversine) distance instead of real driving
+distance — which is also why, without a key, the travel and return legs of
+the same trip always come out identical (a straight line has no direction;
+a real driving route does).
 
 Or build a debug APK to sideload onto a real Android phone (no emulator
 needed — copy the resulting file to the phone and open it; you'll need to
@@ -132,7 +139,8 @@ allow installs from unknown sources):
 ```bash
 flutter build apk --debug \
   --dart-define=SUPABASE_URL=https://xxxx.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=xxxx
+  --dart-define=SUPABASE_ANON_KEY=xxxx \
+  --dart-define=GOOGLE_MAPS_API_KEY=xxxx
 ```
 
 The APK lands at `build/app/outputs/flutter-apk/app-debug.apk`. For iOS,
